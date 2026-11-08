@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mastermind</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Mastermind in the browser: break the codemaker's code, or set one for the solver. Play against the same server as Claude over MCP.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" width="1920" height="1080"></canvas>
+
+  <div id="left">
+    <img id="logo" src="assets/logo.png" alt="MASTERMIND" onerror="this.style.display='none'">
+    <div id="status" class="panel">
+      <div class="row"><span id="mode-label">MASTERMIND</span><span id="preset-label"></span></div>
+      <div id="turn"></div>
+      <div id="message">Welcome. Take a seat and pick a board.</div>
+      <div class="legend"><span class="k black"></span> right colour, right place &nbsp; <span class="k white"></span> right colour, wrong place</div>
+    </div>
+    <div id="controls" class="panel">
+      <button id="btn-check" class="btn gold" title="Check this guess (Enter)">CHECK</button>
+      <button id="btn-undo" class="btn" title="Undo (Backspace)">UNDO</button>
+      <button id="btn-clear" class="btn" title="Clear the row (Delete)">CLEAR</button>
+      <button id="btn-hint" class="btn" title="Ask the solver (H) — costs one guess in the score">HINT</button>
+      <button id="btn-new" class="btn" title="New game (N)">NEW GAME</button>
+      <button id="btn-resign" class="btn" title="Give up">RESIGN</button>
+      <div class="side"><button id="btn-help" class="btn icon" title="Rules (?)">?</button><button id="btn-sound" class="btn icon" title="Mute (M)">&#128266;</button><input id="vol" type="range" min="0" max="1" step="0.01" title="Volume"></div>
+    </div>
+  </div>
+
+  <div id="right" class="panel">
+    <div class="head"><span class="title">SCOREBOARD</span><span id="online" class="badge">OFFLINE</span></div>
+    <div class="tabs"><button data-tab="top" class="sel">TOP SCORES</button><button data-tab="players">PLAYERS</button><button data-tab="recent">RECENT</button><button data-tab="makers">CODEMAKERS</button></div>
+    <div id="board-body"><div class="empty">Loading…</div></div>
+    <div class="foot"><span id="totals"></span><a id="mcp-link" href="docs/mcp.html" target="_blank" rel="noopener">MCP &amp; API for agents &rarr;</a></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="banner" class="hidden"><div class="inner"><h2 id="banner-title"></h2><p id="banner-text"></p><div class="actions"><button id="banner-again" class="btn gold">PLAY AGAIN</button><button id="banner-close" class="btn">LOOK AT THE BOARD</button></div></div></div>
+
+  <div id="setup" class="hidden">
+    <div class="dialog">
+      <h2>NEW GAME</h2>
+      <label class="field">Your name <input id="player-name" maxlength="24" placeholder="You" autocomplete="off"></label>
+      <div class="modes"><button data-mode="breaker" class="sel">BREAK THE CODE</button><button data-mode="maker">MAKE THE CODE</button></div>
+      <p id="setup-mode-text" class="hint"></p>
+      <div id="presets"></div>
+      <div id="custom" class="hidden">
+        <label>Pegs <input id="cfg-pegs" type="range" min="2" max="8" value="4"><b id="cfg-pegs-v">4</b></label>
+        <label>Colours <input id="cfg-colors" type="range" min="2" max="10" value="6"><b id="cfg-colors-v">6</b></label>
+        <label>Guesses <input id="cfg-guesses" type="range" min="1" max="30" value="10"><b id="cfg-guesses-v">10</b></label>
+        <label class="check"><input id="cfg-dups" type="checkbox" checked> repeated colours allowed</label>
+        <label class="check"><input id="cfg-blanks" type="checkbox"> empty positions allowed</label>
+      </div>
+      <p id="setup-note" class="hint"></p>
+      <div class="actions"><button id="setup-start" class="btn gold">START</button><button id="setup-cancel" class="btn">CANCEL</button></div>
+    </div>
+  </div>
+
+  <div id="help" class="hidden"><div class="panel dialog"><h2>MASTERMIND &mdash; RULES</h2><div id="help-body"></div><button id="help-close" class="btn gold">CLOSE</button></div></div>
+
+  <div id="splash">
+    <div class="inner">
+      <img class="logo" src="assets/logo.png" alt="MASTERMIND" onerror="this.style.display='none'">
+      <div class="sub">BREAK THE CODE &middot; OR SET ONE FOR THE SOLVER &middot; PLAY AGAINST CLAUDE'S SCOREBOARD</div>
+      <div id="splash-text">LOADING&hellip;</div>
+      <div class="note">Unofficial recreation of the classic code-breaking game &middot; sound on</div>
+    </div>
+  </div>
+</div>
+
+<script src="js/engine.js"></script>
+<script src="js/core.js"></script>
+<script src="js/config.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/audio-mm.js"></script>
+<script src="js/assets.js"></script>
+<script src="js/client.js"></script>
+<script src="js/game.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

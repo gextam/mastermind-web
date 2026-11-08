@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mastermind &mdash; break the code in the browser, or let Claude play</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Mastermind recreated in HTML5 Canvas: a walnut decoding board with a hinged codemaker shield, glossy pegs, synthesized sound, both roles (break the code or set one for Knuth's solver), a shared scoreboard, and an MCP server plus REST API so Claude can play remotely.">
+<meta property="og:title" content="Mastermind"><meta property="og:image" content="screenshots/hero.jpg">
+<style>
+  :root { --gold: #e9c250; --paper: #f3e9c8; --muted: #b7a77a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at 50% 0%, #1f2a1c 0%, #07060a 60%); color: var(--paper); font-family: "Segoe UI", system-ui, sans-serif; line-height: 1.55; }
+  a { color: var(--gold); }
+  header { text-align: center; padding: 56px 20px 24px; }
+  header img.logo { width: min(720px, 92vw); filter: drop-shadow(0 0 30px rgba(255,200,90,.35)); }
+  header p.tag { font-family: Georgia, serif; letter-spacing: 5px; color: var(--muted); margin: 14px 0 28px; font-size: 14px; text-transform: uppercase; }
+  .cta { display: inline-block; padding: 16px 40px; border-radius: 14px; font-weight: 800; letter-spacing: 2px; color: #2a1a00; text-decoration: none; background: linear-gradient(180deg, #fff3bd, #e9c250 35%, #b8860b 80%); box-shadow: 0 6px 0 #3a2a00, 0 14px 30px rgba(0,0,0,.6); margin: 6px; }
+  .cta.ghost { background: #15131c; color: var(--gold); border: 1px solid #3a3012; box-shadow: none; }
+  .hero { display: block; width: min(1200px, 94vw); margin: 40px auto 0; border-radius: 14px; border: 2px solid #4a3b14; box-shadow: 0 30px 80px rgba(0,0,0,.8); }
+  main { max-width: 1200px; margin: 0 auto; padding: 40px 20px 80px; }
+  h2 { font-family: Georgia, serif; color: var(--gold); letter-spacing: 3px; font-size: 24px; margin: 56px 0 18px; border-bottom: 1px solid #3a3012; padding-bottom: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+  .card { background: rgba(255,255,255,.03); border: 1px solid #3a3012; border-radius: 12px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 8px; color: #ffe9a8; font-size: 17px; } .card p { margin: 0; color: #d9ccaa; font-size: 15px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 22px; }
+  figure { margin: 0; } figure img { width: 100%; border-radius: 10px; border: 1px solid #3a3012; box-shadow: 0 12px 30px rgba(0,0,0,.6); } figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; } td, th { border-bottom: 1px solid #2a2410; padding: 8px 10px; text-align: left; } th { color: var(--gold); }
+  footer { text-align: center; color: #7d6a3a; font-size: 13px; padding: 30px 20px 60px; }
+  code { background: #15131c; padding: 2px 6px; border-radius: 4px; color: #ffe9a8; }
+  pre { background: #0e0d14; border: 1px solid #3a3012; border-radius: 10px; padding: 14px 16px; overflow: auto; font-size: 14px; color: #e6d7b0; }
+  .agent { display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: center; } @media (max-width: 900px) { .agent { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="../assets/logo.png" alt="MASTERMIND">
+  <p class="tag">Break the code &middot; or set one for the solver &middot; shared scoreboard &middot; MCP server for Claude</p>
+  <a class="cta" href="https://cocojs.com/games/mastermind/">PLAY AT THE LIVE TABLE</a><a class="cta ghost" href="../index.html">PLAY OFFLINE HERE</a><a class="cta ghost" href="mcp.html">MCP &amp; API DOCS</a>
+  <img class="hero" src="screenshots/hero.jpg" alt="The decoding board mid-game with the codemaker shield, key pegs, the tray and the scoreboard">
+</header>
+<main>
+  <h2>What it is</h2>
+  <p>The classic code-breaking game on a walnut decoding board under a banker's lamp: the codemaker hides a code of coloured pegs behind a hinged shield, you have ten guesses, and every answer comes back as black and white key pegs. Plain HTML5 Canvas, Web Audio and vanilla JavaScript, no frameworks. The same project ships a dependency-free Node server with a REST API and an <a href="mcp.html">MCP server</a>, so Claude can sit at the same table and play on the same scoreboard.</p>
+  <h2>Features</h2>
+  <div class="grid">
+    <div class="card"><h3>Two roles</h3><p>Break the code, or make one: in codemaker mode you hide a code and the server's Knuth minimax solver breaks it row by row while you watch. Your points are the guesses it needs.</p></div>
+    <div class="card"><h3>Six boards and custom rules</h3><p>Classic 4 × 6, Mini, No repeats, With blanks, Super 5 × 8, Grand 6 × 8, or any mix of 2–8 pegs, 2–10 colours, 1–30 guesses, repeats and blanks on or off.</p></div>
+    <div class="card"><h3>Physical feel</h3><p>Pegs drop into drilled holes with a bounce, key pegs pop in one by one, the brass marker slides to the next row, and the codemaker's shield swings open on its hinge to reveal the code.</p></div>
+    <div class="card"><h3>Hints with a price</h3><p>The solver tells you how many codes are still possible and what it would play next, placed on the board for you. Each hint costs a guess in the score.</p></div>
+    <div class="card"><h3>Shared scoreboard</h3><p>Top scores, players, recent games and codemakers, shared by everyone who plays against the server, agents included. Offline it falls back to a local scoreboard in the browser.</p></div>
+    <div class="card"><h3>Sound</h3><p>Plastic ticks and wooden knocks for the pegs, clinks for the key pegs, the shield's hinge, fanfares, a quiet study-room ambience with a clock; all synthesized live, nothing streamed.</p></div>
+  </div>
+  <h2>Let Claude play</h2>
+  <div class="agent">
+    <div>
+      <p>The server exposes eight MCP tools over Streamable HTTP (and a stdio bridge): <code>rules</code>, <code>new_game</code>, <code>guess</code>, <code>get_game</code>, <code>list_games</code>, <code>hint</code>, <code>resign</code> and <code>get_scores</code>, with the same operations available as a REST API. Connect from Claude Code, Claude Desktop or claude.ai and ask for a game.</p>
+      <pre>claude mcp add --transport http mastermind https://cocojs.com/games/mastermind/mcp</pre>
+      <p>Or run your own: <code>node server/server.js</code> and point the client at <code>http://localhost:8772/mcp</code>.</p>
+      <p><a href="mcp.html">Read the MCP &amp; API documentation →</a></p>
+    </div>
+    <figure><img src="screenshots/scoreboard.jpg" alt="The scoreboard panel"><figcaption>Humans and agents on one scoreboard.</figcaption></figure>
+  </div>
+  <h2>Screenshots</h2>
+  <div class="shots">
+    <figure><img src="screenshots/setup.jpg" alt="New game dialog"><figcaption>Pick a role and a board, or set custom rules.</figcaption></figure>
+    <figure><img src="screenshots/feedback.jpg" alt="First guess answered"><figcaption>The first guess answered with key pegs; the marker moves up a row.</figcaption></figure>
+    <figure><img src="screenshots/hint.jpg" alt="Hint placed on the board"><figcaption>A hint: the solver's suggestion placed on the board.</figcaption></figure>
+    <figure><img src="screenshots/win.jpg" alt="Code broken"><figcaption>The shield opens, the code is revealed, confetti.</figcaption></figure>
+    <figure><img src="screenshots/solving.jpg" alt="The solver breaking your code"><figcaption>Codemaker mode: the solver breaks your code row by row.</figcaption></figure>
+    <figure><img src="screenshots/lost.jpg" alt="Out of guesses on the mini board"><figcaption>Out of guesses on the Mini board.</figcaption></figure>
+  </div>
+  <h2>Controls</h2>
+  <table>
+    <tr><th>Action</th><th>Mouse</th><th>Keyboard</th></tr>
+    <tr><td>Choose a colour / fill the next hole</td><td>click a peg in the tray</td><td><code>1</code>–<code>9</code>, <code>0</code>, <code>←</code> <code>→</code></td></tr>
+    <tr><td>Place / move / remove a peg</td><td>click a hole · drag a peg · right-click</td><td><code>Backspace</code> undo, <code>Delete</code> clear</td></tr>
+    <tr><td>Check the guess / lock the code</td><td>CHECK</td><td><code>Enter</code></td></tr>
+    <tr><td>Hint · New game · Help · Mute</td><td>buttons</td><td><code>H</code> · <code>N</code> · <code>?</code> · <code>M</code></td></tr>
+  </table>
+  <h2>Run it yourself</h2>
+  <p>With Node.js 20+: <code>node server/server.js</code> (or <code>start.cmd</code> on Windows) and open <code>http://localhost:8772/</code>. Without a server the game also runs from any static host with a local scoreboard. The README covers configuration, tests and the headless screenshot tool.</p>
+</main>
+<footer>Unofficial recreation of the classic code-breaking game for entertainment only &middot; backdrop, wood and wordmark generated for this project; pegs and sound synthesized at runtime</footer>
+</body>
+</html>

@@ -1,0 +1,23 @@
+[Unit]
+Description=Mastermind (cocojs.com/games/mastermind) - game server with REST API and MCP
+After=network.target
+
+[Service]
+User=cocojs
+Group=cocojs
+WorkingDirectory=/home/cocojs/mastermind
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8772
+Environment=MASTERMIND_BASE_PATH=/games/mastermind
+Environment=MASTERMIND_PUBLIC_URL=https://cocojs.com/games/mastermind
+Environment=MASTERMIND_DATA=/home/cocojs/mastermind/server/data/state.json
+ExecStart=/opt/cpanel/ea-nodejs22/bin/node server/server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

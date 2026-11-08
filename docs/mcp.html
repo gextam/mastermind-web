@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mastermind MCP server &amp; API &mdash; let Claude play</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Documentation for the Mastermind game server: an MCP server (Streamable HTTP and stdio) and a REST API that let Claude and other agents start games, guess, ask for hints, resign and read the scoreboard.">
+<style>
+  :root { --gold: #e9c250; --paper: #f3e9c8; --muted: #b7a77a; --bg: #07060a; --panel: rgba(255,255,255,.03); --line: #3a3012; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at 50% 0%, #1f2a1c 0%, var(--bg) 60%); color: var(--paper); font-family: "Segoe UI", system-ui, sans-serif; line-height: 1.55; }
+  a { color: var(--gold); }
+  header { text-align: center; padding: 48px 20px 10px; }
+  header img.logo { width: min(560px, 90vw); filter: drop-shadow(0 0 30px rgba(255,200,90,.35)); }
+  header h1 { font-family: Georgia, serif; letter-spacing: 4px; font-size: 26px; margin: 18px 0 6px; color: var(--gold); text-transform: uppercase; }
+  header p.tag { color: var(--muted); margin: 0 0 18px; }
+  .badges span { display: inline-block; font-size: 12px; letter-spacing: 1px; padding: 4px 10px; border-radius: 6px; background: #15131c; border: 1px solid var(--line); margin: 3px; color: #ffe9a8; }
+  nav.toc { max-width: 1100px; margin: 24px auto 0; padding: 14px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); font-size: 15px; display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; }
+  main { max-width: 1100px; margin: 0 auto; padding: 10px 20px 80px; }
+  h2 { font-family: Georgia, serif; color: var(--gold); letter-spacing: 3px; font-size: 24px; margin: 56px 0 18px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+  h3 { color: #ffe9a8; font-size: 19px; margin: 34px 0 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h4 { color: var(--muted); font-size: 13px; letter-spacing: 2px; text-transform: uppercase; margin: 14px 0 6px; }
+  code { background: #15131c; padding: 2px 6px; border-radius: 4px; color: #ffe9a8; font-family: Consolas, "SF Mono", Menlo, monospace; font-size: .92em; }
+  pre.code { background: #0e0d14; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow: auto; font-size: 13px; line-height: 1.45; max-height: 520px; }
+  pre.code code { background: none; padding: 0; color: #e6d7b0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; margin: 10px 0 14px; }
+  td, th { border-bottom: 1px solid #2a2410; padding: 8px 10px; text-align: left; vertical-align: top; } th { color: var(--gold); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .card h3 { margin: 0 0 8px; font-size: 16px; } .card p { margin: 0; color: #d9ccaa; font-size: 14.5px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; } @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  .rest { font-family: Consolas, monospace; font-size: 13px; color: var(--muted); font-weight: 400; }
+  .pill { font-size: 11px; letter-spacing: 1px; padding: 2px 8px; border-radius: 10px; background: #10351c; color: #8df0a8; border: 1px solid #1f7a3a; font-weight: 600; } .pill.warn { background: #3a1a12; color: #ffb3a7; border-color: #7a3a2a; }
+  .muted { color: var(--muted); }
+  .tool { border-top: 1px dashed #2a2410; padding-top: 6px; }
+  .steps li { margin: 8px 0; }
+  .swatch { display: inline-flex; align-items: center; gap: 6px; margin: 4px 10px 4px 0; font-size: 14px; } .swatch i { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff8, var(--c) 45%, #0008); border: 1px solid #0006; display: inline-block; } .swatch b { color: var(--gold); }
+  .cta { display: inline-block; padding: 12px 26px; border-radius: 12px; font-weight: 800; letter-spacing: 2px; color: #2a1a00; text-decoration: none; background: linear-gradient(180deg, #fff3bd, #e9c250 35%, #b8860b 80%); box-shadow: 0 5px 0 #3a2a00, 0 12px 24px rgba(0,0,0,.6); margin: 6px 6px 6px 0; }
+  .cta.ghost { background: #15131c; color: var(--gold); border: 1px solid var(--line); box-shadow: none; }
+  footer { text-align: center; color: #7d6a3a; font-size: 13px; padding: 30px 20px 60px; }
+  .seq { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; font-family: Consolas, monospace; font-size: 13.5px; color: #e6d7b0; white-space: pre; overflow: auto; }
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html"><img class="logo" src="../assets/logo.png" alt="MASTERMIND"></a>
+  <h1>MCP server &amp; API</h1>
+  <p class="tag">Let Claude sit down at the table: start games, guess, ask for hints, resign and read the scoreboard, remotely.</p>
+  <div class="badges"><span>MCP 2025-06-18 · 2025-03-26 · 2024-11-05</span><span>Streamable HTTP + stdio</span><span>REST + OpenAPI 3.1</span><span>8 tools · 3 resources · 2 prompts</span><span>no dependencies</span><span>v1.0.0</span></div>
+  <div><a class="cta" href="../index.html">PLAY IN THE BROWSER</a><a class="cta ghost" href="openapi.json">OPENAPI.JSON</a><a class="cta ghost" href="https://github.com/gextam/mastermind-web">SOURCE</a></div>
+</header>
+<nav class="toc">
+  <a href="#overview">Overview</a><a href="#quickstart">Quick start</a><a href="#flow">A game, call by call</a><a href="#tools">Tools</a><a href="#resources">Resources &amp; prompts</a><a href="#rest">REST API</a><a href="#notation">Notation &amp; boards</a><a href="#scoring">Scoring</a><a href="#strategy">Playing well</a><a href="#server">Running a server</a><a href="#protocol">Protocol notes</a>
+</nav>
+<main>
+  <h2 id="overview">Overview</h2>
+  <p>The Mastermind server is one Node.js process with no dependencies. It serves the browser game, a REST API under <code>/api</code>, and an <strong>MCP server</strong> at <code>/mcp</code> using the Streamable HTTP transport, so any MCP client (Claude Code, Claude Desktop, claude.ai custom connectors, the MCP Inspector, your own agent) can connect over the network and play. A stdio bridge is included for clients that launch servers as local commands. Every player, human or agent, plays on the same scoreboard.</p>
+  <div class="grid">
+    <div class="card"><h3>Codebreaker</h3><p><code>new_game</code> hides a random code; the agent calls <code>guess</code> until the key pegs are all black or the guesses run out. Lower guess counts score higher.</p></div>
+    <div class="card"><h3>Codemaker</h3><p><code>new_game</code> with <code>mode: "maker"</code> and a <code>secret</code>: the server's Knuth minimax solver breaks the code and the transcript comes back at once. Points = guesses the solver needed.</p></div>
+    <div class="card"><h3>Scoreboard</h3><p><code>get_scores</code> returns top scores, codemakers, per-player statistics and recent games; pass <code>player</code> for one player's own record.</p></div>
+    <div class="card"><h3>Same catalog everywhere</h3><p>The MCP tools and the REST routes are generated from one catalog with one validator: identical arguments, identical JSON, identical error codes.</p></div>
+  </div>
+
+  <h2 id="quickstart">Quick start</h2>
+  <h3>1. Run the server</h3>
+  <pre class="code bash"><code>git clone https://github.com/gextam/mastermind-web.git
+cd mastermind-web
+node server/server.js            # game http://localhost:8772/  ·  MCP http://localhost:8772/mcp
+
+# or, on Windows, double-click start.cmd</code></pre>
+  <p>Node.js 20 or newer, nothing to install. The data file <code>server/data/state.json</code> is created on first use.</p>
+  <h3>2. Connect a client</h3>
+  <h4>Claude Code (remote, Streamable HTTP)</h4>
+  <pre class="code bash"><code>claude mcp add --transport http mastermind https://cocojs.com/games/mastermind/mcp
+# with an API key configured on the server:
+claude mcp add --transport http mastermind https://cocojs.com/games/mastermind/mcp --header &quot;Authorization: Bearer YOUR_KEY&quot;</code></pre>
+  <h4>Claude Desktop (stdio bridge in claude_desktop_config.json)</h4>
+  <pre class="code"><code>{
+  &quot;mcpServers&quot;: {
+    &quot;mastermind&quot;: {
+      &quot;command&quot;: &quot;node&quot;,
+      &quot;args&quot;: [
+        &quot;/path/to/mastermind-web/server/mcp-stdio.js&quot;,
+        &quot;--url&quot;,
+        &quot;https://cocojs.com/games/mastermind/mcp&quot;
+      ]
+    }
+  }
+}</code></pre>
+  <p>The bridge forwards every message to the HTTP server so Desktop plays on the shared scoreboard. Pass <code>--local</code> instead of <code>--url</code> to play entirely in-process with a private data file (no server needed), or add <code>--api-key=…</code> when the server requires one.</p>
+  <h4>claude.ai custom connector</h4>
+  <p>Settings → Connectors → Add custom connector → URL <code>https://cocojs.com/games/mastermind/mcp</code>. The server is stateless and needs no OAuth; if you set an API key the connector cannot send it, so leave the key unset for claude.ai or put the server behind your own gateway.</p>
+  <h4>MCP Inspector</h4>
+  <pre class="code bash"><code>npx @modelcontextprotocol/inspector
+# transport: Streamable HTTP · URL: https://cocojs.com/games/mastermind/mcp</code></pre>
+  <h3>3. Say the word</h3>
+  <blockquote class="card"><p>“Play a game of Mastermind as <em>Claude</em> on the classic board. Read the rules first, think about which codes are still possible after every answer, and tell me the secret, your guess count, your score and your rank when you are done.”</p></blockquote>
+  <p>There is also a ready-made prompt, <code>play</code>, that says exactly that (see <a href="#resources">prompts</a>), and <code>node tools/play-demo.js</code> plays a game through the MCP endpoint from the command line so you can watch the transcript.</p>
+
+  <h2 id="flow">A game, call by call</h2>
+  <div class="seq">agent → server   tools/call rules                      (once; notation, boards, scoring)
+agent → server   tools/call new_game {player, preset}  → game_id, palette, guesses_left, message
+agent → server   tools/call guess {game_id, "RROO"}    → feedback {black, white}, history, guesses_left
+agent → server   tools/call guess …                    → …  (keep only codes consistent with every answer)
+server → agent   status "won" | "lost", secret, score  (the secret is revealed only when the game is over)
+agent → server   tools/call get_scores {player}        → rank, statistics, recent games</div>
+  <p>Games have no session: the <code>game_id</code> is the only handle, so an agent can stop and resume from any client. Unfinished games expire after 24 hours of inactivity; finished games remain readable through <code>get_game</code> and in the scoreboard.</p>
+
+  <h2 id="tools">Tools</h2>
+  <p>Every tool returns the result both as a JSON text block and as <code>structuredContent</code>. Validation and game errors come back as a tool result with <code>isError: true</code> and a message such as <code>Error (game_over): …</code>; protocol-level problems (unknown tool, malformed request) are JSON-RPC errors.</p>
+  <table><thead><tr><th>Tool</th><th>Purpose</th><th>REST</th></tr></thead><tbody><tr><td><a href="#tool-rules"><code>rules</code></a></td><td>Rules and notation</td><td class="rest">GET /api/rules</td></tr><tr><td><a href="#tool-new_game"><code>new_game</code></a></td><td>Start a game</td><td class="rest">POST /api/games</td></tr><tr><td><a href="#tool-guess"><code>guess</code></a></td><td>Make a guess</td><td class="rest">POST /api/games/{game_id}/guess</td></tr><tr><td><a href="#tool-get_game"><code>get_game</code></a></td><td>Game state</td><td class="rest">GET /api/games/{game_id}</td></tr><tr><td><a href="#tool-list_games"><code>list_games</code></a></td><td>List games</td><td class="rest">GET /api/games</td></tr><tr><td><a href="#tool-hint"><code>hint</code></a></td><td>Hint</td><td class="rest">POST /api/games/{game_id}/hint</td></tr><tr><td><a href="#tool-resign"><code>resign</code></a></td><td>Resign</td><td class="rest">POST /api/games/{game_id}/resign</td></tr><tr><td><a href="#tool-get_scores"><code>get_scores</code></a></td><td>Scoreboard</td><td class="rest">GET /api/scores</td></tr></tbody></table>
+  <section class="tool" id="tool-rules">
+  <h3><code>rules</code> <span class="rest">GET /api/rules</span><span class="pill">read-only</span></h3>
+  <p>The rules of Mastermind as played here: boards (presets), the colours and how to write a guess, how the black/white key pegs are counted, the scoring formula and a sound strategy. Read it once before your first game.</p>
+  <p class="muted">No arguments.</p>
+  <div class="cols">
+    <div><h4>MCP call</h4><pre class="code"><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: {
+    &quot;name&quot;: &quot;rules&quot;,
+    &quot;arguments&quot;: {}
+  }
+}</code></pre><h4>REST equivalent</h4><pre class="code bash"><code>curl https://cocojs.com/games/mastermind/api/rules</code></pre></div>
+    <div><h4>Result (<code>structuredContent</code> / response body)</h4><pre class="code"><code>{
+  &quot;text&quot;: &quot;# Mastermind\n\nThe codemaker hides a code of N coloured pegs; the codebreaker has a limited number of guesses to find it.\n… (full markdown continues)&quot;,
+  &quot;feedback&quot;: {
+    &quot;black&quot;: &quot;right colour in the right position&quot;,
+    &quot;white&quot;: &quot;right colour in the wrong position&quot;,
+    &quot;note&quot;: &quot;key pegs are counts, not positions; each peg is matched at most once&quot;
+  },
+  &quot;presets&quot;: {
+    &quot;classic&quot;: {
+      &quot;label&quot;: &quot;Classic&quot;,
+      &quot;pegs&quot;: 4,
+      &quot;colors&quot;: 6,
+      &quot;max_guesses&quot;: 10,
+      &quot;allow_duplicates&quot;: true,
+      &quot;allow_blanks&quot;: false,
+      &quot;code_space&quot;: 1296
+    },
+    &quot;mini&quot;: {
+      &quot;label&quot;: &quot;Mini&quot;,
+      &quot;pegs&quot;: 3,
+      &quot;colors&quot;: 6,
+      &quot;max_guesses&quot;: 8,
+      &quot;allow_duplicates&quot;: true,
+      &quot;allow_blanks&quot;: false,
+      &quot;code_space&quot;: 216
+    },
+    &quot;unique&quot;: {
+      &quot;label&quot;: &quot;No repeats&quot;,
+      &quot;pegs&quot;: 4,
+      &quot;colors&quot;: 6,
+      &quot;max_guesses&quot;: 10,
+      &quot;allow_duplicates&quot;: false,
+      &quot;allow_blanks&quot;: false,
+      &quot;code_space&quot;: 360
+    },
+    &quot;blanks&quot;: {
+      &quot;label&quot;: &quot;With blanks&quot;,
+      &quot;pegs&quot;: 4,
+      &quot;colors&quot;: 6,
+      &quot;max_guesses&quot;: 12,
+      &quot;allow_duplicates&quot;: true,
+      &quot;allow_blanks&quot;: true,
+      &quot;code_space&quot;: 2401
+    },
+    &quot;super&quot;: {
+      &quot;label&quot;: &quot;Super&quot;,
+      &quot;pegs&quot;: 5,
+      &quot;colors&quot;: 8,
+      &quot;max_guesses&quot;: 12,
+      &quot;allow_duplicates&quot;: true,
+      &quot;allow_blanks&quot;: false,
+      &quot;code_space&quot;: 32768
+    },
+    &quot;grand&quot;: {
+      &quot;label&quot;: &quot;Grand&quot;,
+      &quot;pegs&quot;: 6,
+      &quot;colors&quot;: 8,
+      &quot;max_guesses&quot;: 15,
+      &quot;allow_duplicates&quot;: true,
+      &quot;allow_blanks&quot;: false,
+      &quot;code_space&quot;: 262144
+    }
+  },
+  &quot;limits&quot;: {
+    &quot;pegs&quot;: [
+      2,
+      8
+    ],
+    &quot;colors&quot;: [
+      2,
+      10
+    ],
+    &quot;max_guesses&quot;: [
+      1,
+      30
+    ],
+    &quot;player_name_length&quot;: 24
+  },
+  &quot;palette&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;red&quot;,
+      &quot;letter&quot;: &quot;R&quot;,
+      &quot;hex&quot;: &quot;#e3261f&quot;
+    },
+    {
+      &quot;id&quot;: 2,
+      &quot;name&quot;: &quot;orange&quot;,
+      &quot;letter&quot;: &quot;O&quot;,
+      &quot;hex&quot;: &quot;#ff7f11&quot;
+    },
+    {
+      &quot;id&quot;: 3,
+      &quot;name&quot;: &quot;yellow&quot;,
+      &quot;letter&quot;: &quot;Y&quot;,
+      &quot;hex&quot;: &quot;#ffd42a&quot;
+    },
+    {
+      &quot;id&quot;: 4,
+      &quot;name&quot;: &quot;green&quot;,
+      &quot;letter&quot;: &quot;G&quot;,
+      &quot;hex&quot;: &quot;#21a83f&quot;
+    },
+    {
+      &quot;id&quot;: 5,
+      &quot;name&quot;: &quot;blue&quot;,
+      &quot;letter&quot;: &quot;B&quot;,
+      &quot;hex&quot;: &quot;#1f5fe0&quot;
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;name&quot;: &quot;purple&quot;,
+      &quot;letter&quot;: &quot;P&quot;,
+      &quot;hex&quot;: &quot;#7e35c4&quot;
+    },
+    {
+      &quot;id&quot;: 7,
+      &quot;name&quot;: &quot;white&quot;,
+      &quot;letter&quot;: &quot;W&quot;,
+      &quot;hex&quot;: &quot;#f4f4f4&quot;
+    },
+    {
+      &quot;id&quot;: 8,
+      &quot;name&quot;: &quot;black&quot;,
+      &quot;letter&quot;: &quot;K&quot;,
+      &quot;hex&quot;: &quot;#1b1b1f&quot;
+    },
+    {
+      &quot;id&quot;: 9,
+      &quot;name&quot;: &quot;cyan&quot;,
+      &quot;letter&quot;: &quot;C&quot;,
+      &quot;hex&quot;: &quot;#19c6d9&quot;
+    },
+    {
+      &quot;id&quot;: 10,
+      &quot;name&quot;: &quot;pink&quot;,
+      &quot;letter&quot;: &quot;N&quot;,
+      &quot;hex&quot;: &quot;#ff5fa8&quot;
+    }
+  ],
+  &quot;blank&quot;: {
+    &quot;id&quot;: 0,
+    &quot;name&quot;: &quot;empty&quot;,
+    &quot;letter&quot;: &quot;.&quot;,
+    &quot;only_when&quot;: &quot;allow_blanks is true&quot;
+  },
+  &quot;guess_formats&quot;: [
+    &quot;[\&quot;red\&quot;,\&quot;green\&quot;,\&quot;blue\&quot;,\&quot;yellow\&quot;]&quot;,
+    &quot;\&quot;RGBY\&quot;&quot;,
+    &quot;\&quot;1453\&quot;&quot;,
+    &quot;\&quot;red, green, blue, yellow\&quot;&quot;,
+    &quot;[1,4,5,3]&quot;
+  ],
+  &quot;scoring&quot;: {
+    &quot;codebreaker&quot;: &quot;round(1000 * (max_guesses + 1 - guesses_used - hints_used) / max_guesses * difficulty); difficulty = ln(code_space)/ln(1296); lost or resigned = 0&quot;,
+    &quot;codemaker&quot;: &quot;points = guesses the solver needed (+1 if it failed)&quot;
+  }
+}</code></pre></div>
+  </div>
+</section>
+<section class="tool" id="tool-new_game">
+  <h3><code>new_game</code> <span class="rest">POST /api/games</span></h3>
+  <p>Start a new game. Default: you are the codebreaker on the classic board (4 pegs, 6 colours, 10 guesses, repeats allowed) and the server hides a random code. Pass preset or the individual settings for other boards. With mode &quot;maker&quot; you supply the secret instead and the server's Knuth solver tries to break it; the game is returned already finished with the solver's transcript and your codemaker points. Returns the game_id you need for every other call, the palette, and a message telling you what to do next.</p>
+  <table class="args"><thead><tr><th>Argument</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>player</code></td><td>string</td><td>no</td><td>Your name on the scoreboard (default &quot;Anonymous&quot;)<br><span class="muted">max length 24</span></td></tr><tr><td><code>mode</code></td><td>string</td><td>no</td><td>breaker: you guess the server's code (default). maker: you set the code, the server's solver breaks it.<br><span class="muted">one of <code>breaker</code>, <code>maker</code></span></td></tr><tr><td><code>preset</code></td><td>string</td><td>no</td><td>Board preset: classic (4 pegs · 6 colours · 10 guesses); mini (3 pegs · 6 colours · 8 guesses); unique (4 pegs · 6 colours · no repeated colours); blanks (4 pegs · 6 colours + empty · 12 guesses); super (5 pegs · 8 colours · 12 guesses); grand (6 pegs · 8 colours · 15 guesses)<br><span class="muted">one of <code>classic</code>, <code>mini</code>, <code>unique</code>, <code>blanks</code>, <code>super</code>, <code>grand</code></span></td></tr><tr><td><code>pegs</code></td><td>integer</td><td>no</td><td>Pegs in the code (overrides the preset)<br><span class="muted">min 2 · max 8</span></td></tr><tr><td><code>colors</code></td><td>integer</td><td>no</td><td>Number of colours in play (the first N of the palette)<br><span class="muted">min 2 · max 10</span></td></tr><tr><td><code>max_guesses</code></td><td>integer</td><td>no</td><td>Guesses allowed<br><span class="muted">min 1 · max 30</span></td></tr><tr><td><code>allow_duplicates</code></td><td>boolean</td><td>no</td><td>May the code repeat a colour? (default true)</td></tr><tr><td><code>allow_blanks</code></td><td>boolean</td><td>no</td><td>May the code contain empty positions? (default false)</td></tr><tr><td><code>secret</code></td><td>string | array</td><td>no</td><td>maker mode only: the code the solver must break. A code: an array of colour names, letters or numbers ([&quot;red&quot;,&quot;green&quot;,&quot;blue&quot;,&quot;yellow&quot;], [&quot;R&quot;,&quot;G&quot;,&quot;B&quot;,&quot;Y&quot;], [1,4,5,3]) or a string of letters/digits (&quot;RGBY&quot;, &quot;1453&quot;). Letters: R red, O orange, Y yellow, G green, B blue, P purple, W white, K black, C cyan, N pink; &quot;.&quot; is empty when blanks are allowed.</td></tr></tbody></table>
+  <div class="cols">
+    <div><h4>MCP call</h4><pre class="code"><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: {
+    &quot;name&quot;: &quot;new_game&quot;,
+    &quot;arguments&quot;: {
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;preset&quot;: &quot;classic&quot;
+    }
+  }
+}</code></pre><h4>REST equivalent</h4><pre class="code bash"><code>curl -X POST https://cocojs.com/games/mastermind/api/games \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;player&quot;:&quot;Claude&quot;,&quot;preset&quot;:&quot;classic&quot;}'</code></pre></div>
+    <div><h4>Result (<code>structuredContent</code> / response body)</h4><pre class="code"><code>{
+  &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;,
+  &quot;player&quot;: &quot;Claude&quot;,
+  &quot;mode&quot;: &quot;breaker&quot;,
+  &quot;status&quot;: &quot;playing&quot;,
+  &quot;finished&quot;: false,
+  &quot;config&quot;: {
+    &quot;preset&quot;: &quot;classic&quot;,
+    &quot;pegs&quot;: 4,
+    &quot;colors&quot;: 6,
+    &quot;max_guesses&quot;: 10,
+    &quot;allow_duplicates&quot;: true,
+    &quot;allow_blanks&quot;: false,
+    &quot;code_space&quot;: 1296,
+    &quot;difficulty&quot;: 1
+  },
+  &quot;palette&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;red&quot;,
+      &quot;letter&quot;: &quot;R&quot;
+    },
+    {
+      &quot;id&quot;: 2,
+      &quot;name&quot;: &quot;orange&quot;,
+      &quot;letter&quot;: &quot;O&quot;
+    },
+    {
+      &quot;id&quot;: 3,
+      &quot;name&quot;: &quot;yellow&quot;,
+      &quot;letter&quot;: &quot;Y&quot;
+    },
+    {
+      &quot;id&quot;: 4,
+      &quot;name&quot;: &quot;green&quot;,
+      &quot;letter&quot;: &quot;G&quot;
+    },
+    {
+      &quot;id&quot;: 5,
+      &quot;name&quot;: &quot;blue&quot;,
+      &quot;letter&quot;: &quot;B&quot;
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;name&quot;: &quot;purple&quot;,
+      &quot;letter&quot;: &quot;P&quot;
+    }
+  ],
+  &quot;guesses_used&quot;: 0,
+  &quot;guesses_left&quot;: 10,
+  &quot;hints_used&quot;: 0,
+  &quot;history&quot;: [],
+  &quot;created_at&quot;: &quot;2026-11-08T12:00:04.000Z&quot;,
+  &quot;updated_at&quot;: &quot;2026-11-08T12:00:04.000Z&quot;,
+  &quot;message&quot;: &quot;Guess 1 of 10 (10 left). Send a code of 4 colours with guess(game_id, guess); black = right colour in the right position, white = right colour in the wrong position.&quot;
+}</code></pre></div>
+  </div>
+</section>
+<section class="tool" id="tool-guess">
+  <h3><code>guess</code> <span class="rest">POST /api/games/{game_id}/guess</span></h3>
+  <p>Submit a guess for a game you are breaking. Returns the key pegs (black = right colour in the right position, white = right colour in the wrong position), the full history so far, guesses left, and when the game ends the secret and your score. A guess must have exactly as many pegs as the code.</p>
+  <table class="args"><thead><tr><th>Argument</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>game_id</code></td><td>string</td><td>yes</td><td>The game_id returned by new_game<br><span class="muted">max length 40</span></td></tr><tr><td><code>guess</code></td><td>string | array</td><td>yes</td><td>A code: an array of colour names, letters or numbers ([&quot;red&quot;,&quot;green&quot;,&quot;blue&quot;,&quot;yellow&quot;], [&quot;R&quot;,&quot;G&quot;,&quot;B&quot;,&quot;Y&quot;], [1,4,5,3]) or a string of letters/digits (&quot;RGBY&quot;, &quot;1453&quot;). Letters: R red, O orange, Y yellow, G green, B blue, P purple, W white, K black, C cyan, N pink; &quot;.&quot; is empty when blanks are allowed.</td></tr></tbody></table>
+  <div class="cols">
+    <div><h4>MCP call</h4><pre class="code"><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: {
+    &quot;name&quot;: &quot;guess&quot;,
+    &quot;arguments&quot;: {
+      &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;,
+      &quot;guess&quot;: [
+        &quot;red&quot;,
+        &quot;red&quot;,
+        &quot;orange&quot;,
+        &quot;orange&quot;
+      ]
+    }
+  }
+}</code></pre><h4>REST equivalent</h4><pre class="code bash"><code>curl -X POST https://cocojs.com/games/mastermind/api/games/k83ppwt7b6mp/guess \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;guess&quot;:[&quot;red&quot;,&quot;red&quot;,&quot;orange&quot;,&quot;orange&quot;]}'</code></pre></div>
+    <div><h4>Result (<code>structuredContent</code> / response body)</h4><pre class="code"><code>{
+  &quot;feedback&quot;: {
+    &quot;black&quot;: 0,
+    &quot;white&quot;: 1
+  },
+  &quot;correct&quot;: false,
+  &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;,
+  &quot;player&quot;: &quot;Claude&quot;,
+  &quot;mode&quot;: &quot;breaker&quot;,
+  &quot;status&quot;: &quot;playing&quot;,
+  &quot;finished&quot;: false,
+  &quot;config&quot;: {
+    &quot;preset&quot;: &quot;classic&quot;,
+    &quot;pegs&quot;: 4,
+    &quot;colors&quot;: 6,
+    &quot;max_guesses&quot;: 10,
+    &quot;allow_duplicates&quot;: true,
+    &quot;allow_blanks&quot;: false,
+    &quot;code_space&quot;: 1296,
+    &quot;difficulty&quot;: 1
+  },
+  &quot;palette&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;red&quot;,
+      &quot;letter&quot;: &quot;R&quot;
+    },
+    {
+      &quot;id&quot;: 2,
+      &quot;name&quot;: &quot;orange&quot;,
+      &quot;letter&quot;: &quot;O&quot;
+    },
+    {
+      &quot;id&quot;: 3,
+      &quot;name&quot;: &quot;yellow&quot;,
+      &quot;letter&quot;: &quot;Y&quot;
+    },
+    {
+      &quot;id&quot;: 4,
+      &quot;name&quot;: &quot;green&quot;,
+      &quot;letter&quot;: &quot;G&quot;
+    },
+    {
+      &quot;id&quot;: 5,
+      &quot;name&quot;: &quot;blue&quot;,
+      &quot;letter&quot;: &quot;B&quot;
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;name&quot;: &quot;purple&quot;,
+      &quot;letter&quot;: &quot;P&quot;
+    }
+  ],
+  &quot;guesses_used&quot;: 1,
+  &quot;guesses_left&quot;: 9,
+  &quot;hints_used&quot;: 0,
+  &quot;history&quot;: [
+    {
+      &quot;turn&quot;: 1,
+      &quot;guess&quot;: [
+        &quot;red&quot;,
+        &quot;red&quot;,
+        &quot;orange&quot;,
+        &quot;orange&quot;
+      ],
+      &quot;letters&quot;: &quot;RROO&quot;,
+      &quot;black&quot;: 0,
+      &quot;white&quot;: 1
+    }
+  ],
+  &quot;created_at&quot;: &quot;2026-11-08T12:00:04.000Z&quot;,
+  &quot;updated_at&quot;: &quot;2026-11-08T12:00:08.000Z&quot;,
+  &quot;message&quot;: &quot;Guess 2 of 10 (9 left). Last answer: 0 black, 1 white. Send a code of 4 colours with guess(game_id, guess); black = right colour in the right position, white = right colour in the wrong position.&quot;
+}</code></pre></div>
+  </div>
+</section>
+<section class="tool" id="tool-get_game">
+  <h3><code>get_game</code> <span class="rest">GET /api/games/{game_id}</span><span class="pill">read-only</span></h3>
+  <p>The current state of a game: configuration, palette, every guess with its feedback, guesses left, and the secret and score once it is finished. Finished games stay readable (archived) after the live object is pruned.</p>
+  <table class="args"><thead><tr><th>Argument</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>game_id</code></td><td>string</td><td>yes</td><td>The game_id returned by new_game<br><span class="muted">max length 40</span></td></tr></tbody></table>
+  <div class="cols">
+    <div><h4>MCP call</h4><pre class="code"><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: {
+    &quot;name&quot;: &quot;get_game&quot;,
+    &quot;arguments&quot;: {
+      &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;
+    }
+  }
+}</code></pre><h4>REST equivalent</h4><pre class="code bash"><code>curl https://cocojs.com/games/mastermind/api/games/k83ppwt7b6mp</code></pre></div>
+    <div><h4>Result (<code>structuredContent</code> / response body)</h4><pre class="code"><code>{
+  &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;,
+  &quot;player&quot;: &quot;Claude&quot;,
+  &quot;mode&quot;: &quot;breaker&quot;,
+  &quot;status&quot;: &quot;won&quot;,
+  &quot;finished&quot;: true,
+  &quot;config&quot;: {
+    &quot;preset&quot;: &quot;classic&quot;,
+    &quot;pegs&quot;: 4,
+    &quot;colors&quot;: 6,
+    &quot;max_guesses&quot;: 10,
+    &quot;allow_duplicates&quot;: true,
+    &quot;allow_blanks&quot;: false,
+    &quot;code_space&quot;: 1296,
+    &quot;difficulty&quot;: 1
+  },
+  &quot;palette&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;red&quot;,
+      &quot;letter&quot;: &quot;R&quot;
+    },
+    {
+      &quot;id&quot;: 2,
+      &quot;name&quot;: &quot;orange&quot;,
+      &quot;letter&quot;: &quot;O&quot;
+    },
+    {
+      &quot;id&quot;: 3,
+      &quot;name&quot;: &quot;yellow&quot;,
+      &quot;letter&quot;: &quot;Y&quot;
+    },
+    {
+      &quot;id&quot;: 4,
+      &quot;name&quot;: &quot;green&quot;,
+      &quot;letter&quot;: &quot;G&quot;
+    },
+    {
+      &quot;id&quot;: 5,
+      &quot;name&quot;: &quot;blue&quot;,
+      &quot;letter&quot;: &quot;B&quot;
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;name&quot;: &quot;purple&quot;,
+      &quot;letter&quot;: &quot;P&quot;
+    }
+  ],
+  &quot;guesses_used&quot;: 5,
+  &quot;guesses_left&quot;: 5,
+  &quot;hints_used&quot;: 1,
+  &quot;history&quot;: [
+    {
+      &quot;turn&quot;: 1,
+      &quot;guess&quot;: [
+        &quot;red&quot;,
+        &quot;red&quot;,
+        &quot;orange&quot;,
+        &quot;orange&quot;
+      ],
+      &quot;letters&quot;: &quot;RROO&quot;,
+      &quot;black&quot;: 0,
+      &quot;white&quot;: 1
+    },
+    {
+      &quot;turn&quot;: 2,
+      &quot;guess&quot;: [
+        &quot;orange&quot;,
+        &quot;yellow&quot;,
+        &quot;green&quot;,
+        &quot;green&quot;
+      ],
+      &quot;letters&quot;: &quot;OYGG&quot;,
+      &quot;black&quot;: 1,
+      &quot;white&quot;: 1
+    },
+    {
+      &quot;turn&quot;: 3,
+      &quot;guess&quot;: [
+        &quot;green&quot;,
+        &quot;blue&quot;,
+        &quot;red&quot;,
+        &quot;green&quot;
+      ],
+      &quot;letters&quot;: &quot;GBRG&quot;,
+      &quot;black&quot;: 0,
+      &quot;white&quot;: 1
+    },
+    {
+      &quot;turn&quot;: 4,
+      &quot;guess&quot;: [
+        &quot;orange&quot;,
+        &quot;purple&quot;,
+        &quot;yellow&quot;,
+        &quot;blue&quot;
+      ],
+      &quot;letters&quot;: &quot;OPYB&quot;,
+      &quot;black&quot;: 0,
+      &quot;white&quot;: 2
+    },
+    {
+      &quot;turn&quot;: 5,
+      &quot;guess&quot;: [
+        &quot;purple&quot;,
+        &quot;orange&quot;,
+        &quot;green&quot;,
+        &quot;purple&quot;
+      ],
+      &quot;letters&quot;: &quot;POGP&quot;,
+      &quot;black&quot;: 4,
+      &quot;white&quot;: 0
+    }
+  ],
+  &quot;created_at&quot;: &quot;2026-11-08T12:00:04.000Z&quot;,
+  &quot;updated_at&quot;: &quot;2026-11-08T12:00:28.000Z&quot;,
+  &quot;message&quot;: &quot;Code broken in 5 guesses with 1 hint. Score 500.&quot;,
+  &quot;secret&quot;: {
+    &quot;colors&quot;: [
+      &quot;purple&quot;,
+      &quot;orange&quot;,
+      &quot;green&quot;,
+      &quot;purple&quot;
+    ],
+    &quot;letters&quot;: &quot;POGP&quot;,
+    &quot;ids&quot;: [
+      6,
+      2,
+      4,
+      6
+    ]
+  },
+  &quot;score&quot;: 500,
+  &quot;duration_ms&quot;: 24000,
+  &quot;finished_at&quot;: &quot;2026-11-08T12:00:28.000Z&quot;
+}</code></pre></div>
+  </div>
+</section>
+<section class="tool" id="tool-list_games">
+  <h3><code>list_games</code> <span class="rest">GET /api/games</span><span class="pill">read-only</span></h3>
+  <p>List games on the server, newest first: by default the games still in progress; filter by player name or status (playing, won, lost, resigned, solved, unsolved, finished, all). Useful to resume a game whose id you lost.</p>
+  <table class="args"><thead><tr><th>Argument</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>player</code></td><td>string</td><td>no</td><td>Only this player's games<br><span class="muted">max length 24</span></td></tr><tr><td><code>status</code></td><td>string</td><td>no</td><td>Default playing<br><span class="muted">one of <code>playing</code>, <code>finished</code>, <code>all</code>, <code>won</code>, <code>lost</code>, <code>resigned</code>, <code>solved</code>, <code>unsolved</code></span></td></tr><tr><td><code>limit</code></td><td>integer</td><td>no</td><td>Default 20<br><span class="muted">min 1 · max 100</span></td></tr></tbody></table>
+  <div class="cols">
+    <div><h4>MCP call</h4><pre class="code"><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: {
+    &quot;name&quot;: &quot;list_games&quot;,
+    &quot;arguments&quot;: {
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;status&quot;: &quot;playing&quot;
+    }
+  }
+}</code></pre><h4>REST equivalent</h4><pre class="code bash"><code>curl https://cocojs.com/games/mastermind/api/games?player=Claude&amp;status=playing</code></pre></div>
+    <div><h4>Result (<code>structuredContent</code> / response body)</h4><pre class="code"><code>{
+  &quot;count&quot;: 1,
+  &quot;games&quot;: [
+    {
+      &quot;game_id&quot;: &quot;bgqwxpyvr7d5&quot;,
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;mode&quot;: &quot;breaker&quot;,
+      &quot;status&quot;: &quot;playing&quot;,
+      &quot;preset&quot;: &quot;super&quot;,
+      &quot;pegs&quot;: 5,
+      &quot;colors&quot;: 8,
+      &quot;guesses_used&quot;: 0,
+      &quot;guesses_left&quot;: 12,
+      &quot;score&quot;: null,
+      &quot;created_at&quot;: &quot;2026-11-08T12:00:32.000Z&quot;,
+      &quot;updated_at&quot;: &quot;2026-11-08T12:00:32.000Z&quot;
+    }
+  ]
+}</code></pre></div>
+  </div>
+</section>
+<section class="tool" id="tool-hint">
+  <h3><code>hint</code> <span class="rest">POST /api/games/{game_id}/hint</span></h3>
+  <p>Ask the server's solver for help in a game you are breaking: how many codes are still consistent with the feedback so far, a sample of them, and the guess it would play next. Each hint costs one guess in the score (it does not use up a turn).</p>
+  <table class="args"><thead><tr><th>Argument</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>game_id</code></td><td>string</td><td>yes</td><td>The game_id returned by new_game<br><span class="muted">max length 40</span></td></tr></tbody></table>
+  <div class="cols">
+    <div><h4>MCP call</h4><pre class="code"><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: {
+    &quot;name&quot;: &quot;hint&quot;,
+    &quot;arguments&quot;: {
+      &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;
+    }
+  }
+}</code></pre><h4>REST equivalent</h4><pre class="code bash"><code>curl -X POST https://cocojs.com/games/mastermind/api/games/k83ppwt7b6mp/hint</code></pre></div>
+    <div><h4>Result (<code>structuredContent</code> / response body)</h4><pre class="code"><code>{
+  &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;,
+  &quot;remaining_codes&quot;: 256,
+  &quot;suggestion&quot;: {
+    &quot;colors&quot;: [
+      &quot;orange&quot;,
+      &quot;yellow&quot;,
+      &quot;green&quot;,
+      &quot;green&quot;
+    ],
+    &quot;letters&quot;: &quot;OYGG&quot;,
+    &quot;ids&quot;: [
+      2,
+      3,
+      4,
+      4
+    ]
+  },
+  &quot;sample&quot;: [
+    {
+      &quot;colors&quot;: [
+        &quot;blue&quot;,
+        &quot;orange&quot;,
+        &quot;green&quot;,
+        &quot;yellow&quot;
+      ],
+      &quot;letters&quot;: &quot;BOGY&quot;,
+      &quot;ids&quot;: [
+        5,
+        2,
+        4,
+        3
+      ]
+    },
+    {
+      &quot;colors&quot;: [
+        &quot;yellow&quot;,
+        &quot;purple&quot;,
+        &quot;blue&quot;,
+        &quot;red&quot;
+      ],
+      &quot;letters&quot;: &quot;YPBR&quot;,
+      &quot;ids&quot;: [
+        3,
+        6,
+        5,
+        1
+      ]
+    },
+    {
+      &quot;colors&quot;: [
+        &quot;blue&quot;,
+        &quot;orange&quot;,
+        &quot;green&quot;,
+        &quot;blue&quot;
+      ],
+      &quot;letters&quot;: &quot;BOGB&quot;,
+      &quot;ids&quot;: [
+        5,
+        2,
+        4,
+        5
+      ]
+    },
+    {
+      &quot;colors&quot;: [
+        &quot;yellow&quot;,
+        &quot;yellow&quot;,
+        &quot;red&quot;,
+        &quot;blue&quot;
+      ],
+      &quot;letters&quot;: &quot;YYRB&quot;,
+      &quot;ids&quot;: [
+        3,
+        3,
+        1,
+        5
+      ]
+    },
+    {
+      &quot;colors&quot;: [
+        &quot;blue&quot;,
+        &quot;purple&quot;,
+        &quot;red&quot;,
+        &quot;green&quot;
+      ],
+      &quot;letters&quot;: &quot;BPRG&quot;,
+      &quot;ids&quot;: [
+        5,
+        6,
+        1,
+        4
+      ]
+    }
+  ],
+  &quot;hints_used&quot;: 1,
+  &quot;note&quot;: &quot;Each hint counts as one extra guess in the score.&quot;
+}</code></pre></div>
+  </div>
+</section>
+<section class="tool" id="tool-resign">
+  <h3><code>resign</code> <span class="rest">POST /api/games/{game_id}/resign</span><span class="pill warn">destructive</span></h3>
+  <p>Give up a game in progress. The secret is revealed, the game is recorded as resigned with a score of 0.</p>
+  <table class="args"><thead><tr><th>Argument</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>game_id</code></td><td>string</td><td>yes</td><td>The game_id returned by new_game<br><span class="muted">max length 40</span></td></tr></tbody></table>
+  <div class="cols">
+    <div><h4>MCP call</h4><pre class="code"><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: {
+    &quot;name&quot;: &quot;resign&quot;,
+    &quot;arguments&quot;: {
+      &quot;game_id&quot;: &quot;bgqwxpyvr7d5&quot;
+    }
+  }
+}</code></pre><h4>REST equivalent</h4><pre class="code bash"><code>curl -X POST https://cocojs.com/games/mastermind/api/games/bgqwxpyvr7d5/resign</code></pre></div>
+    <div><h4>Result (<code>structuredContent</code> / response body)</h4><pre class="code"><code>{
+  &quot;game_id&quot;: &quot;bgqwxpyvr7d5&quot;,
+  &quot;player&quot;: &quot;Claude&quot;,
+  &quot;mode&quot;: &quot;breaker&quot;,
+  &quot;status&quot;: &quot;resigned&quot;,
+  &quot;finished&quot;: true,
+  &quot;config&quot;: {
+    &quot;preset&quot;: &quot;super&quot;,
+    &quot;pegs&quot;: 5,
+    &quot;colors&quot;: 8,
+    &quot;max_guesses&quot;: 12,
+    &quot;allow_duplicates&quot;: true,
+    &quot;allow_blanks&quot;: false,
+    &quot;code_space&quot;: 32768,
+    &quot;difficulty&quot;: 1.45
+  },
+  &quot;palette&quot;: [
+    {
+      &quot;id&quot;: 1,
+      &quot;name&quot;: &quot;red&quot;,
+      &quot;letter&quot;: &quot;R&quot;
+    },
+    {
+      &quot;id&quot;: 2,
+      &quot;name&quot;: &quot;orange&quot;,
+      &quot;letter&quot;: &quot;O&quot;
+    },
+    {
+      &quot;id&quot;: 3,
+      &quot;name&quot;: &quot;yellow&quot;,
+      &quot;letter&quot;: &quot;Y&quot;
+    },
+    {
+      &quot;id&quot;: 4,
+      &quot;name&quot;: &quot;green&quot;,
+      &quot;letter&quot;: &quot;G&quot;
+    },
+    {
+      &quot;id&quot;: 5,
+      &quot;name&quot;: &quot;blue&quot;,
+      &quot;letter&quot;: &quot;B&quot;
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;name&quot;: &quot;purple&quot;,
+      &quot;letter&quot;: &quot;P&quot;
+    },
+    {
+      &quot;id&quot;: 7,
+      &quot;name&quot;: &quot;white&quot;,
+      &quot;letter&quot;: &quot;W&quot;
+    },
+    {
+      &quot;id&quot;: 8,
+      &quot;name&quot;: &quot;black&quot;,
+      &quot;letter&quot;: &quot;K&quot;
+    }
+  ],
+  &quot;guesses_used&quot;: 0,
+  &quot;guesses_left&quot;: 12,
+  &quot;hints_used&quot;: 0,
+  &quot;history&quot;: [],
+  &quot;created_at&quot;: &quot;2026-11-08T12:00:32.000Z&quot;,
+  &quot;updated_at&quot;: &quot;2026-11-08T12:00:36.000Z&quot;,
+  &quot;message&quot;: &quot;You resigned. The code was yellow, white, black, blue, green (YWKBG).&quot;,
+  &quot;secret&quot;: {
+    &quot;colors&quot;: [
+      &quot;yellow&quot;,
+      &quot;white&quot;,
+      &quot;black&quot;,
+      &quot;blue&quot;,
+      &quot;green&quot;
+    ],
+    &quot;letters&quot;: &quot;YWKBG&quot;,
+    &quot;ids&quot;: [
+      3,
+      7,
+      8,
+      5,
+      4
+    ]
+  },
+  &quot;score&quot;: 0,
+  &quot;duration_ms&quot;: 4000,
+  &quot;finished_at&quot;: &quot;2026-11-08T12:00:36.000Z&quot;
+}</code></pre></div>
+  </div>
+</section>
+<section class="tool" id="tool-get_scores">
+  <h3><code>get_scores</code> <span class="rest">GET /api/scores</span><span class="pill">read-only</span></h3>
+  <p>The scoreboard: top codebreaker scores, the strongest codemakers, per-player statistics (games, wins, win rate, average guesses, best score) and the most recent games. Pass player to get that player's own statistics and recent games as well.</p>
+  <table class="args"><thead><tr><th>Argument</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody><tr><td><code>player</code></td><td>string</td><td>no</td><td>Also return this player's statistics and recent games<br><span class="muted">max length 24</span></td></tr><tr><td><code>limit</code></td><td>integer</td><td>no</td><td>Rows per table (default 10)<br><span class="muted">min 1 · max 100</span></td></tr><tr><td><code>mode</code></td><td>string</td><td>no</td><td>Only count games of this mode<br><span class="muted">one of <code>breaker</code>, <code>maker</code></span></td></tr></tbody></table>
+  <div class="cols">
+    <div><h4>MCP call</h4><pre class="code"><code>{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 1,
+  &quot;method&quot;: &quot;tools/call&quot;,
+  &quot;params&quot;: {
+    &quot;name&quot;: &quot;get_scores&quot;,
+    &quot;arguments&quot;: {
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;limit&quot;: 10
+    }
+  }
+}</code></pre><h4>REST equivalent</h4><pre class="code bash"><code>curl https://cocojs.com/games/mastermind/api/scores?player=Claude&amp;limit=10</code></pre></div>
+    <div><h4>Result (<code>structuredContent</code> / response body)</h4><pre class="code"><code>{
+  &quot;generated_at&quot;: &quot;2026-11-08T06:05:57.781Z&quot;,
+  &quot;totals&quot;: {
+    &quot;games&quot;: 4,
+    &quot;breaker_games&quot;: 3,
+    &quot;wins&quot;: 2,
+    &quot;losses&quot;: 0,
+    &quot;resigned&quot;: 1,
+    &quot;maker_games&quot;: 1,
+    &quot;players&quot;: 2
+  },
+  &quot;top_scores&quot;: [
+    {
+      &quot;rank&quot;: 1,
+      &quot;player&quot;: &quot;Sophia&quot;,
+      &quot;score&quot;: 1000,
+      &quot;preset&quot;: &quot;classic&quot;,
+      &quot;pegs&quot;: 4,
+      &quot;colors&quot;: 6,
+      &quot;guesses_used&quot;: 1,
+      &quot;hints_used&quot;: 0,
+      &quot;duration_ms&quot;: 4000,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:48.000Z&quot;,
+      &quot;game_id&quot;: &quot;kcztnhrw49yg&quot;
+    },
+    {
+      &quot;rank&quot;: 2,
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;score&quot;: 500,
+      &quot;preset&quot;: &quot;classic&quot;,
+      &quot;pegs&quot;: 4,
+      &quot;colors&quot;: 6,
+      &quot;guesses_used&quot;: 5,
+      &quot;hints_used&quot;: 1,
+      &quot;duration_ms&quot;: 24000,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:28.000Z&quot;,
+      &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;
+    }
+  ],
+  &quot;codemakers&quot;: [
+    {
+      &quot;rank&quot;: 1,
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;points&quot;: 4,
+      &quot;solver_guesses&quot;: 4,
+      &quot;solved&quot;: true,
+      &quot;preset&quot;: &quot;classic&quot;,
+      &quot;secret&quot;: &quot;RGBY&quot;,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:40.000Z&quot;,
+      &quot;game_id&quot;: &quot;6w3hwdycdic2&quot;
+    }
+  ],
+  &quot;players&quot;: [
+    {
+      &quot;player&quot;: &quot;Sophia&quot;,
+      &quot;games&quot;: 1,
+      &quot;wins&quot;: 1,
+      &quot;losses&quot;: 0,
+      &quot;resigned&quot;: 0,
+      &quot;win_rate&quot;: 100,
+      &quot;avg_guesses_when_won&quot;: 1,
+      &quot;best_score&quot;: 1000,
+      &quot;total_score&quot;: 1000,
+      &quot;maker_games&quot;: 0,
+      &quot;maker_points&quot;: 0,
+      &quot;last_played&quot;: &quot;2026-11-08T12:00:48.000Z&quot;
+    },
+    {
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;games&quot;: 3,
+      &quot;wins&quot;: 1,
+      &quot;losses&quot;: 0,
+      &quot;resigned&quot;: 1,
+      &quot;win_rate&quot;: 50,
+      &quot;avg_guesses_when_won&quot;: 5,
+      &quot;best_score&quot;: 500,
+      &quot;total_score&quot;: 500,
+      &quot;maker_games&quot;: 1,
+      &quot;maker_points&quot;: 4,
+      &quot;last_played&quot;: &quot;2026-11-08T12:00:40.000Z&quot;
+    }
+  ],
+  &quot;recent&quot;: [
+    {
+      &quot;player&quot;: &quot;Sophia&quot;,
+      &quot;mode&quot;: &quot;breaker&quot;,
+      &quot;status&quot;: &quot;won&quot;,
+      &quot;score&quot;: 1000,
+      &quot;preset&quot;: &quot;classic&quot;,
+      &quot;guesses_used&quot;: 1,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:48.000Z&quot;,
+      &quot;game_id&quot;: &quot;kcztnhrw49yg&quot;
+    },
+    {
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;mode&quot;: &quot;maker&quot;,
+      &quot;status&quot;: &quot;solved&quot;,
+      &quot;score&quot;: 4,
+      &quot;preset&quot;: &quot;classic&quot;,
+      &quot;guesses_used&quot;: 4,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:40.000Z&quot;,
+      &quot;game_id&quot;: &quot;6w3hwdycdic2&quot;
+    },
+    {
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;mode&quot;: &quot;breaker&quot;,
+      &quot;status&quot;: &quot;resigned&quot;,
+      &quot;score&quot;: 0,
+      &quot;preset&quot;: &quot;super&quot;,
+      &quot;guesses_used&quot;: 0,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:36.000Z&quot;,
+      &quot;game_id&quot;: &quot;bgqwxpyvr7d5&quot;
+    },
+    {
+      &quot;player&quot;: &quot;Claude&quot;,
+      &quot;mode&quot;: &quot;breaker&quot;,
+      &quot;status&quot;: &quot;won&quot;,
+      &quot;score&quot;: 500,
+      &quot;preset&quot;: &quot;classic&quot;,
+      &quot;guesses_used&quot;: 5,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:28.000Z&quot;,
+      &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;
+    }
+  ],
+  &quot;player&quot;: {
+    &quot;player&quot;: &quot;Claude&quot;,
+    &quot;games&quot;: 3,
+    &quot;wins&quot;: 1,
+    &quot;losses&quot;: 0,
+    &quot;resigned&quot;: 1,
+    &quot;win_rate&quot;: 50,
+    &quot;avg_guesses_when_won&quot;: 5,
+    &quot;best_score&quot;: 500,
+    &quot;total_score&quot;: 500,
+    &quot;maker_games&quot;: 1,
+    &quot;maker_points&quot;: 4,
+    &quot;last_played&quot;: &quot;2026-11-08T12:00:40.000Z&quot;
+  },
+  &quot;player_games&quot;: [
+    {
+      &quot;game_id&quot;: &quot;6w3hwdycdic2&quot;,
+      &quot;mode&quot;: &quot;maker&quot;,
+      &quot;status&quot;: &quot;solved&quot;,
+      &quot;score&quot;: 4,
+      &quot;preset&quot;: &quot;classic&quot;,
+      &quot;guesses_used&quot;: 4,
+      &quot;hints_used&quot;: 0,
+      &quot;duration_ms&quot;: 0,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:40.000Z&quot;,
+      &quot;secret&quot;: &quot;RGBY&quot;,
+      &quot;history&quot;: [
+        &quot;RROO 1b0w&quot;,
+        &quot;RYGG 1b2w&quot;,
+        &quot;YRGB 0b4w&quot;,
+        &quot;RGBY 4b0w&quot;
+      ]
+    },
+    {
+      &quot;game_id&quot;: &quot;bgqwxpyvr7d5&quot;,
+      &quot;mode&quot;: &quot;breaker&quot;,
+      &quot;status&quot;: &quot;resigned&quot;,
+      &quot;score&quot;: 0,
+      &quot;preset&quot;: &quot;super&quot;,
+      &quot;guesses_used&quot;: 0,
+      &quot;hints_used&quot;: 0,
+      &quot;duration_ms&quot;: 4000,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:36.000Z&quot;,
+      &quot;secret&quot;: &quot;YWKBG&quot;,
+      &quot;history&quot;: []
+    },
+    {
+      &quot;game_id&quot;: &quot;k83ppwt7b6mp&quot;,
+      &quot;mode&quot;: &quot;breaker&quot;,
+      &quot;status&quot;: &quot;won&quot;,
+      &quot;score&quot;: 500,
+      &quot;preset&quot;: &quot;classic&quot;,
+      &quot;guesses_used&quot;: 5,
+      &quot;hints_used&quot;: 1,
+      &quot;duration_ms&quot;: 24000,
+      &quot;finished_at&quot;: &quot;2026-11-08T12:00:28.000Z&quot;,
+      &quot;secret&quot;: &quot;POGP&quot;,
+      &quot;history&quot;: [
+        &quot;RROO 0b1w&quot;,
+        &quot;OYGG 1b1w&quot;,
+        &quot;GBRG 0b1w&quot;,
+        &quot;OPYB 0b2w&quot;,
+        &quot;POGP 4b0w&quot;
+      ]
+    }
+  ]
+}</code></pre></div>
+  </div>
+</section>
+
+  <h2 id="resources">Resources &amp; prompts</h2>
+  <table><thead><tr><th>Resource</th><th>Type</th><th>Content</th></tr></thead><tbody>
+    <tr><td><code>mastermind://rules</code></td><td>text/markdown</td><td>Rules, notation, boards and scoring (markdown)</td></tr><tr><td><code>mastermind://scores</code></td><td>application/json</td><td>Current scoreboard (JSON)</td></tr>
+    <tr><td><code>mastermind://games/{game_id}</code></td><td>application/json</td><td>State of one game (JSON) (template)</td></tr>
+  </tbody></table>
+  <table><thead><tr><th>Prompt</th><th>Arguments</th><th>Purpose</th></tr></thead><tbody>
+    <tr><td><code>play</code></td><td><code>player</code>, <code>preset</code></td><td>Play one complete game of Mastermind against the server and report the result</td></tr><tr><td><code>strategy</code></td><td>—</td><td>A short explanation of how to break a Mastermind code efficiently</td></tr>
+  </tbody></table>
+
+  <h2 id="rest">REST API</h2>
+  <p>Base path <code>https://cocojs.com/games/mastermind/api</code>. JSON in, JSON out; <code>POST</code> bodies are JSON objects; <code>GET</code> arguments go in the query string. Errors use one shape:</p>
+  <pre class="code"><code>{
+  &quot;error&quot;: {
+    &quot;status&quot;: 400,
+    &quot;code&quot;: &quot;invalid_colour&quot;,
+    &quot;message&quot;: &quot;\&quot;Z\&quot; is not one of this game's colours: red (R), orange (O), yellow (Y), green (G), blue (B), purple (P)&quot;
+  }
+}</code></pre>
+  <table><thead><tr><th>Endpoint</th><th>Tool</th><th>Notes</th></tr></thead><tbody>
+    <tr><td class="rest">GET /api</td><td>—</td><td>Index of endpoints and links</td></tr>
+    <tr><td class="rest">GET /api/health</td><td>—</td><td>Liveness, version, active game count</td></tr>
+    <tr><td class="rest">GET /api/tools</td><td>—</td><td>The MCP tool catalog, resources and prompts as JSON</td></tr>
+    <tr><td class="rest">GET /api/openapi.json</td><td>—</td><td>OpenAPI 3.1 document (<a href="openapi.json">static copy</a>)</td></tr>
+    <tr><td class="rest">GET /api/rules</td><td><a href="#tool-rules"><code>rules</code></a></td><td>read-only</td></tr><tr><td class="rest">POST /api/games</td><td><a href="#tool-new_game"><code>new_game</code></a></td><td>returns 201</td></tr><tr><td class="rest">POST /api/games/{game_id}/guess</td><td><a href="#tool-guess"><code>guess</code></a></td><td></td></tr><tr><td class="rest">GET /api/games/{game_id}</td><td><a href="#tool-get_game"><code>get_game</code></a></td><td>read-only</td></tr><tr><td class="rest">GET /api/games</td><td><a href="#tool-list_games"><code>list_games</code></a></td><td>read-only</td></tr><tr><td class="rest">POST /api/games/{game_id}/hint</td><td><a href="#tool-hint"><code>hint</code></a></td><td></td></tr><tr><td class="rest">POST /api/games/{game_id}/resign</td><td><a href="#tool-resign"><code>resign</code></a></td><td></td></tr><tr><td class="rest">GET /api/scores</td><td><a href="#tool-get_scores"><code>get_scores</code></a></td><td>read-only</td></tr>
+    <tr><td class="rest">DELETE /api/games/{game_id}</td><td><code>resign</code></td><td>alias</td></tr>
+  </tbody></table>
+  <table><thead><tr><th>Status</th><th>Code</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td>400</td><td><code>invalid_guess</code>, <code>invalid_colour</code>, <code>invalid_config</code>, <code>invalid_argument</code>, <code>unknown_argument</code>, <code>missing_argument</code>, <code>missing_secret</code>, <code>invalid_json</code></td><td>The request is malformed; the message says exactly what to fix</td></tr>
+    <tr><td>401</td><td><code>unauthorized</code></td><td>The server requires <code>Authorization: Bearer &lt;key&gt;</code></td></tr>
+    <tr><td>403</td><td><code>forbidden_origin</code></td><td>Browser <code>Origin</code> not allowed on <code>/mcp</code></td></tr>
+    <tr><td>404</td><td><code>not_found</code></td><td>Unknown game id or endpoint</td></tr>
+    <tr><td>409</td><td><code>game_over</code>, <code>wrong_mode</code></td><td>The game is finished, or it is a codemaker game</td></tr>
+    <tr><td>413 / 429 / 503</td><td><code>bad_body</code>, <code>rate_limited</code>, <code>busy</code></td><td>Body too large, too many requests (<code>Retry-After</code>), too many games in progress</td></tr>
+  </tbody></table>
+
+  <h2 id="notation">Notation &amp; boards</h2>
+  <p>A code is a list of colours. A guess (or a codemaker secret) may be sent as an array of names, letters or numbers, or as one string of letters or digits; the server echoes codes back as <code>colors</code> (names), <code>letters</code> and <code>ids</code>. A game uses the first <code>colors</code> entries of the palette:</p>
+  <p><span class="swatch" style="--c:#e3261f"><i></i>1 red <b>R</b></span><span class="swatch" style="--c:#ff7f11"><i></i>2 orange <b>O</b></span><span class="swatch" style="--c:#ffd42a"><i></i>3 yellow <b>Y</b></span><span class="swatch" style="--c:#21a83f"><i></i>4 green <b>G</b></span><span class="swatch" style="--c:#1f5fe0"><i></i>5 blue <b>B</b></span><span class="swatch" style="--c:#7e35c4"><i></i>6 purple <b>P</b></span><span class="swatch" style="--c:#f4f4f4"><i></i>7 white <b>W</b></span><span class="swatch" style="--c:#1b1b1f"><i></i>8 black <b>K</b></span><span class="swatch" style="--c:#19c6d9"><i></i>9 cyan <b>C</b></span><span class="swatch" style="--c:#ff5fa8"><i></i>10 pink <b>N</b></span></p>
+  <p>With <code>allow_blanks</code> the extra symbol <code>empty</code> (<code>0</code>, <code>.</code>) may appear in codes.</p>
+  <table><thead><tr><th>Preset</th><th>Name</th><th>Pegs</th><th>Colours</th><th>Guesses</th><th>Repeats</th><th>Codes</th></tr></thead><tbody><tr><td><code>classic</code></td><td>Classic</td><td>4</td><td>6</td><td>10</td><td>yes</td><td>1,296</td></tr><tr><td><code>mini</code></td><td>Mini</td><td>3</td><td>6</td><td>8</td><td>yes</td><td>216</td></tr><tr><td><code>unique</code></td><td>No repeats</td><td>4</td><td>6</td><td>10</td><td>no</td><td>360</td></tr><tr><td><code>blanks</code></td><td>With blanks</td><td>4</td><td>6 + empty</td><td>12</td><td>yes</td><td>2,401</td></tr><tr><td><code>super</code></td><td>Super</td><td>5</td><td>8</td><td>12</td><td>yes</td><td>32,768</td></tr><tr><td><code>grand</code></td><td>Grand</td><td>6</td><td>8</td><td>15</td><td>yes</td><td>262,144</td></tr><tr><td><em>custom</em></td><td>—</td><td>2–8</td><td>2–10</td><td>1–30</td><td>on/off</td><td>hints and codemaker mode up to 2,000,000</td></tr></tbody></table>
+  <p><strong>Feedback.</strong> <code>black</code> = pegs of the right colour in the right position, <code>white</code> = pegs of the right colour in the wrong position. They are counts, not positions, and each secret peg and each guess peg is matched at most once: against the code <code>RGBY</code>, the guess <code>RRRR</code> earns 1 black and 0 white.</p>
+
+  <h2 id="scoring">Scoring</h2>
+  <p><strong>Codebreaker:</strong> <code>score = round(1000 × (max_guesses + 1 − guesses_used − hints_used) ÷ max_guesses × difficulty)</code>, where <code>difficulty = ln(code_space) ÷ ln(1296)</code> (classic = 1.00, super ≈ 1.45, grand ≈ 1.74). A classic code broken on the first guess scores 1000, on the fifth 600, on the tenth 100; a hint costs the same as one guess; lost or resigned games score 0.</p>
+  <p><strong>Codemaker:</strong> points = the guesses the solver needed, +1 if it never broke the code. The solver is Knuth's minimax: on the classic board it needs at most five guesses, so a 5 is the best you can do there; bigger boards give it more to think about.</p>
+  <p>The scoreboard ranks codebreaker wins by score, then by time; <code>players</code> aggregates games, wins, win rate, average guesses on wins, best and total score; <code>codemakers</code> ranks by points.</p>
+
+  <h2 id="strategy">Playing well</h2>
+  <ol class="steps">
+    <li><strong>Open with two pairs</strong> (<code>RROO</code> on the classic board). It is the opening that leaves the fewest possibilities in the worst case.</li>
+    <li><strong>Keep the consistent set.</strong> After each answer, discard every candidate code that would not have produced exactly that black/white answer against your guess. Only codes that survive every answer can be the secret.</li>
+    <li><strong>Guess a survivor</strong>, or better, the guess (survivor or not) whose worst-case answer leaves the smallest consistent set. That is Knuth's rule and it solves the classic board in five.</li>
+    <li><strong>Ask for a hint only when stuck:</strong> <code>hint</code> returns the size of the consistent set, a sample and the solver's next guess, but costs a guess in the score.</li>
+    <li><strong>Read <code>message</code>.</strong> Every response says what to do next and, at the end, the secret and your score.</li>
+  </ol>
+
+  <h2 id="server">Running a server</h2>
+  <pre class="code bash"><code>node server/server.js [--port=8772] [--host=0.0.0.0] [--data=server/data/state.json]
+                      [--base-path=/games/mastermind] [--api-key=SECRET]
+                      [--allowed-origins=https://a.example,https://b.example]
+                      [--public-url=https://example.com/games/mastermind] [--no-static] [--quiet]
+
+environment: PORT, HOST, MASTERMIND_DATA, MASTERMIND_BASE_PATH, MASTERMIND_API_KEY,
+             MASTERMIND_ALLOWED_ORIGINS, MASTERMIND_PUBLIC_URL</code></pre>
+  <table><thead><tr><th>Concern</th><th>Behaviour</th></tr></thead><tbody>
+    <tr><td>Authentication</td><td>None by default. With <code>--api-key</code>, <code>/mcp</code> and the game routes require <code>Authorization: Bearer &lt;key&gt;</code> (or <code>X-Api-Key</code>); <code>/api/health</code>, <code>/api/rules</code>, <code>/api/scores</code>, <code>/api/tools</code> and the OpenAPI document stay public.</td></tr>
+    <tr><td>Origin policy</td><td>Browser requests to <code>/mcp</code> must come from the same host, from <code>localhost</code>, from the configured public URL or from <code>--allowed-origins</code> (DNS-rebinding protection). Non-browser clients send no <code>Origin</code> and are unaffected. CORS is open for the REST API.</td></tr>
+    <tr><td>Rate limit</td><td>A token bucket per client address: bursts of 240 requests, refilling at 4 per second; excess requests get 429 with <code>Retry-After</code>. <code>X-Forwarded-For</code> is honoured when the connection comes from a private address (a reverse proxy).</td></tr>
+    <tr><td>Persistence</td><td>Live games and finished records are kept in one JSON file, written atomically and debounced. Finished games are pruned from memory after 6 hours (records stay); idle unfinished games expire after 24 hours. Records are capped at 20,000.</td></tr>
+    <tr><td>Reverse proxy</td><td>Mount under a prefix with <code>--base-path</code> (or <code>MASTERMIND_BASE_PATH</code>): the server strips it from every request, so <code>ProxyPass /games/mastermind http://127.0.0.1:8772/games/mastermind</code> in Apache (or <code>location /games/mastermind/ { proxy_pass http://127.0.0.1:8772; }</code> in nginx) just works. Set <code>--public-url</code> so the documents advertise the external address.</td></tr>
+    <tr><td>stdio bridge</td><td><code>node server/mcp-stdio.js --url https://cocojs.com/games/mastermind/mcp</code> relays to a running server; <code>--local</code> runs the game in-process with <code>--data</code> (default <code>server/data/state-stdio.json</code>). Without <code>--url</code> it probes <code>localhost:8772</code> and falls back to local play.</td></tr>
+  </tbody></table>
+
+  <h2 id="protocol">Protocol notes</h2>
+  <ul>
+    <li>Protocol versions <code>2025-06-18</code>, <code>2025-03-26</code>, <code>2024-11-05</code>; the server echoes a supported requested version, otherwise answers with the newest.</li>
+    <li>Streamable HTTP, <strong>stateless</strong>: no <code>Mcp-Session-Id</code> is issued or required. <code>POST /mcp</code> answers with <code>application/json</code> (or <code>text/event-stream</code> when that is the only accepted type). Notifications and client responses get <code>202</code>. <code>GET /mcp</code> returns <code>405</code> (no server-initiated stream); <code>DELETE /mcp</code> is accepted and a no-op. JSON-RPC batches are processed in order.</li>
+    <li>Capabilities: <code>tools</code>, <code>resources</code> (with templates, no subscriptions), <code>prompts</code>, <code>logging</code>. Tool results carry <code>structuredContent</code> plus a text block; tool annotations mark read-only and destructive tools.</li>
+    <li>Errors: <code>-32700</code> parse, <code>-32600</code> invalid request, <code>-32601</code> unknown method, <code>-32602</code> unknown tool / bad params, <code>-32002</code> unknown resource.</li>
+  </ul>
+  <h4>Raw exchange</h4>
+  <pre class="code http"><code>POST https://cocojs.com/games/mastermind/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;initialize&quot;,&quot;params&quot;:{&quot;protocolVersion&quot;:&quot;2025-06-18&quot;,&quot;capabilities&quot;:{},&quot;clientInfo&quot;:{&quot;name&quot;:&quot;my-agent&quot;,&quot;version&quot;:&quot;1.0&quot;}}}
+
+→ 200 {&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;result&quot;:{&quot;protocolVersion&quot;:&quot;2025-06-18&quot;,&quot;capabilities&quot;:{&quot;tools&quot;:{&quot;listChanged&quot;:false},&quot;resources&quot;:{&quot;subscribe&quot;:false,&quot;listChanged&quot;:false},&quot;prompts&quot;:{&quot;listChanged&quot;:false},&quot;logging&quot;:{}},&quot;serverInfo&quot;:{&quot;name&quot;:&quot;mastermind&quot;,&quot;title&quot;:&quot;Mastermind&quot;,&quot;version&quot;:&quot;1.0.0&quot;},&quot;instructions&quot;:&quot;…&quot;}}
+
+{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;notifications/initialized&quot;}            → 202
+{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:2,&quot;method&quot;:&quot;tools/list&quot;}                    → 200 {…&quot;tools&quot;:[…8 tools…]}
+{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:3,&quot;method&quot;:&quot;tools/call&quot;,&quot;params&quot;:{&quot;name&quot;:&quot;new_game&quot;,&quot;arguments&quot;:{&quot;player&quot;:&quot;Claude&quot;}}}</code></pre>
+</main>
+<footer>Generated by <code>tools/gen-docs.mjs</code> from the server's tool catalog · Mastermind is a trademark of its owner; this is an unofficial recreation for entertainment · play money, no wagering</footer>
+</body>
+</html>

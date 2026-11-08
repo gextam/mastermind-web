@@ -1,0 +1,18 @@
+{
+  "name": "mastermind-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mastermind in the browser plus a dependency-free game server: REST API and MCP server (Streamable HTTP and stdio) so Claude can play remotely.",
+  "main": "server/server.js",
+  "bin": { "mastermind-mcp": "server/mcp-stdio.js" },
+  "scripts": {
+    "start": "node server/server.js",
+    "mcp": "node server/mcp-stdio.js",
+    "test": "node tools/test-engine.js && node tools/test-api.js",
+    "smoke": "node tools/screenshots.mjs",
+    "docs": "node tools/gen-docs.mjs",
+    "demo": "node tools/play-demo.js"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}
